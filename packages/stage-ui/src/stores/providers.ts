@@ -48,6 +48,7 @@ import {
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { isAbsoluteUrl } from '../utils/string'
 import { models as elevenLabsModels } from './providers/elevenlabs/list-models'
 
 // Add at top after imports
@@ -169,6 +170,11 @@ export interface VoiceInfo {
 export const useProvidersStore = defineStore('providers', () => {
   const providerCredentials = useLocalStorage<Record<string, Record<string, unknown>>>('settings/credentials/providers', {})
   const { t } = useI18n()
+  const notBaseUrlError = computed(() => ({
+    errors: [new Error('Base URL is not absolute')],
+    reason: 'Base URL is not absolute. Check your input.',
+    valid: false,
+  }))
 
   // Helper function to fetch OpenRouter models manually
   async function fetchOpenRouterModels(config: Record<string, unknown>): Promise<ModelInfo[]> {
@@ -226,6 +232,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.apiKey && new Error('API key is required'),
             !config.baseUrl && new Error('Base URL is required'),
           ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
 
           return {
             errors,
@@ -721,6 +731,10 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
+          if (!isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           // Check if the Ollama server is reachable
           return fetch(`${(config.baseUrl as string).trim()}models`, { headers: (config.headers as HeadersInit) || undefined })
             .then((response) => {
@@ -781,6 +795,10 @@ export const useProvidersStore = defineStore('providers', () => {
               reason: 'Base URL is required. Default to http://localhost:11434/v1/ for Ollama.',
               valid: false,
             }
+          }
+
+          if (!isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
           }
 
           // Check if the Ollama server is reachable
@@ -874,6 +892,10 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
+          if (!isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           // Check if the vLLM is reachable
           return fetch(`${(config.baseUrl as string).trim()}models`, { headers: (config.headers as HeadersInit) || undefined })
             .then((response) => {
@@ -891,6 +913,79 @@ export const useProvidersStore = defineStore('providers', () => {
               return {
                 errors: [err],
                 reason: `Failed to reach vLLM, error: ${String(err)} occurred.`,
+                valid: false,
+              }
+            })
+        },
+      },
+    },
+    'lm-studio': {
+      id: 'lm-studio',
+      category: 'chat',
+      tasks: ['text-generation'],
+      nameKey: 'settings.pages.providers.provider.lm-studio.title',
+      name: 'LM Studio',
+      descriptionKey: 'settings.pages.providers.provider.lm-studio.description',
+      description: 'lmstudio.ai',
+      icon: 'i-lobe-icons:lmstudio',
+      defaultOptions: () => ({
+        baseUrl: 'http://localhost:1234/v1/',
+      }),
+      createProvider: async config => createOpenAI('', (config.baseUrl as string).trim()),
+      capabilities: {
+        listModels: async (config) => {
+          try {
+            const response = await fetch(`${(config.baseUrl as string).trim()}models`, {
+              headers: (config.headers as HeadersInit) || undefined,
+            })
+
+            if (!response.ok) {
+              throw new Error(`LM Studio server returned non-ok status code: ${response.statusText}`)
+            }
+
+            const data = await response.json()
+            return data.data.map((model: any) => ({
+              id: model.id,
+              name: model.id,
+              provider: 'lm-studio',
+              description: model.description || '',
+              contextLength: model.context_length || 0,
+              deprecated: false,
+            })) satisfies ModelInfo[]
+          }
+          catch (error) {
+            console.error('Error fetching LM Studio models:', error)
+            return []
+          }
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          if (!config.baseUrl) {
+            return {
+              errors: [new Error('Base URL is required.')],
+              reason: 'Base URL is required. Default to http://localhost:1234/v1/ for LM Studio.',
+              valid: false,
+            }
+          }
+
+          // Check if the LM Studio server is reachable
+          return fetch(`${(config.baseUrl as string).trim()}models`, { headers: (config.headers as HeadersInit) || undefined })
+            .then((response) => {
+              const errors = [
+                !response.ok && new Error(`LM Studio server returned non-ok status code: ${response.statusText}`),
+              ].filter(Boolean)
+
+              return {
+                errors,
+                reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+                valid: response.ok,
+              }
+            })
+            .catch((err) => {
+              return {
+                errors: [err],
+                reason: `Failed to reach LM Studio server, error: ${String(err)} occurred.\n\nMake sure LM Studio is running and the local server is started. You can start the local server in LM Studio by going to the 'Local Server' tab and clicking 'Start Server'.`,
                 valid: false,
               }
             })
@@ -932,10 +1027,62 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required. Default to https://api.openai.com/v1/ for official OpenAI API.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
             valid: !!config.baseUrl,
+          }
+        },
+      },
+    },
+    'openai-compatible': {
+      id: 'openai-compatible',
+      category: 'chat',
+      tasks: ['text-generation'],
+      nameKey: 'settings.pages.providers.provider.openai-compatible.title',
+      name: 'OpenAI Compatible',
+      descriptionKey: 'settings.pages.providers.provider.openai-compatible.description',
+      description: 'Connect to any API that follows the OpenAI specification.',
+      icon: 'i-lobe-icons:openai',
+      defaultOptions: () => ({
+        baseUrl: '',
+      }),
+      createProvider: async config => createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()),
+      capabilities: {
+        listModels: async (config) => {
+          return (await listModels({
+            ...createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()).model(),
+          })).map((model) => {
+            return {
+              id: model.id,
+              name: model.id,
+              provider: 'openai-compatible',
+              description: '',
+              contextLength: 0,
+              deprecated: false,
+            } satisfies ModelInfo
+          })
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          const errors = [
+            !config.apiKey && new Error('API key is required'),
+            !config.baseUrl && new Error('Base URL is required'),
+          ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
+          return {
+            errors,
+            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+            valid: !!config.apiKey && !!config.baseUrl,
           }
         },
       },
@@ -1045,10 +1192,65 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required. Default to https://api.openai.com/v1/ for official OpenAI API.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
             valid: !!config.baseUrl,
+          }
+        },
+      },
+    },
+    'openai-compatible-audio-speech': {
+      id: 'openai-compatible-audio-speech',
+      category: 'speech',
+      tasks: ['text-to-speech'],
+      nameKey: 'settings.pages.providers.provider.openai-compatible.title',
+      name: 'OpenAI Compatible',
+      descriptionKey: 'settings.pages.providers.provider.openai-compatible.description',
+      description: 'Connect to any API that follows the OpenAI specification.',
+      icon: 'i-lobe-icons:openai',
+      defaultOptions: () => ({
+        baseUrl: '',
+      }),
+      createProvider: async config => createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()),
+      capabilities: {
+        listModels: async (config) => {
+          return (await listModels({
+            ...createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()).model(),
+          })).map((model) => {
+            return {
+              id: model.id,
+              name: model.id,
+              provider: 'openai-compatible-audio-speech',
+              description: '',
+              contextLength: 0,
+              deprecated: false,
+            } satisfies ModelInfo
+          })
+        },
+        listVoices: async () => {
+          return []
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          const errors = [
+            !config.apiKey && new Error('API key is required'),
+            !config.baseUrl && new Error('Base URL is required'),
+          ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
+          return {
+            errors,
+            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+            valid: !!config.apiKey && !!config.baseUrl,
           }
         },
       },
@@ -1088,10 +1290,62 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required. Default to https://api.openai.com/v1/ for official OpenAI API.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
             valid: !!config.baseUrl,
+          }
+        },
+      },
+    },
+    'openai-compatible-audio-transcription': {
+      id: 'openai-compatible-audio-transcription',
+      category: 'transcription',
+      tasks: ['speech-to-text', 'automatic-speech-recognition', 'asr', 'stt'],
+      nameKey: 'settings.pages.providers.provider.openai-compatible.title',
+      name: 'OpenAI Compatible',
+      descriptionKey: 'settings.pages.providers.provider.openai-compatible.description',
+      description: 'Connect to any API that follows the OpenAI specification.',
+      icon: 'i-lobe-icons:openai',
+      defaultOptions: () => ({
+        baseUrl: '',
+      }),
+      createProvider: async config => createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()),
+      capabilities: {
+        listModels: async (config) => {
+          return (await listModels({
+            ...createOpenAI((config.apiKey as string).trim(), (config.baseUrl as string).trim()).model(),
+          })).map((model) => {
+            return {
+              id: model.id,
+              name: model.id,
+              provider: 'openai-compatible-audio-transcription',
+              description: '',
+              contextLength: 0,
+              deprecated: false,
+            } satisfies ModelInfo
+          })
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          const errors = [
+            !config.apiKey && new Error('API key is required'),
+            !config.baseUrl && new Error('Base URL is required'),
+          ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
+          return {
+            errors,
+            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+            valid: !!config.apiKey && !!config.baseUrl,
           }
         },
       },
@@ -1219,6 +1473,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required. Default to https://api.anthropic.com/v1/ for official Claude API with OpenAI compatibility.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
@@ -1262,6 +1520,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.apiKey && new Error('API key is required.'),
             !config.baseUrl && new Error('Base URL is required. Default to https://generativelanguage.googleapis.com/v1beta/openai/ for official Google Gemini API with OpenAI compatibility.'),
           ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
 
           return {
             errors,
@@ -1348,6 +1610,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
@@ -1428,6 +1694,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
@@ -1488,6 +1758,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
@@ -1544,6 +1818,10 @@ export const useProvidersStore = defineStore('providers', () => {
           const errors = [
             !config.baseUrl && new Error('Base URL is required. Default to http://localhost:11996/tts for Index-TTS.'),
           ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
 
           return {
             errors,
@@ -1613,6 +1891,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
@@ -1673,6 +1955,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
             !((config.app as any)?.appId) && new Error('App ID is required.'),
           ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
 
           return {
             errors,
@@ -1841,6 +2127,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
 
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           return {
             errors,
             reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
@@ -1939,6 +2229,10 @@ export const useProvidersStore = defineStore('providers', () => {
             !config.apiKey && new Error('API key is required.'),
             !config.baseUrl && new Error('Base URL is required.'),
           ].filter(Boolean)
+
+          if (!!config.baseUrl && !isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
 
           return {
             errors,
@@ -2064,6 +2358,10 @@ export const useProvidersStore = defineStore('providers', () => {
             }
           }
 
+          if (!isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
+          }
+
           // Check if the local running Player 2 is reachable
           return await fetch(`${(config.baseUrl as string).endsWith('/') ? (config.baseUrl as string).slice(0, -1) : config.baseUrl}/health`, {
             method: 'GET',
@@ -2167,6 +2465,10 @@ export const useProvidersStore = defineStore('providers', () => {
               reason: 'Base URL is required. Default to http://localhost:4315/v1/',
               valid: false,
             }
+          }
+
+          if (!isAbsoluteUrl(config.baseUrl as string)) {
+            return notBaseUrlError.value
           }
 
           return {
