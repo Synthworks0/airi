@@ -38,13 +38,13 @@ clap = { version = "4.5.40", features = ["derive"] }
 rustfft = "6.4.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-ort = { version = "2.0.0-rc.10", features = ["ndarray", "coreml"] }
+ort = { version = "2.0.0-rc.10", features = ["ndarray", "coreml", "download-binaries"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-ort = { version = "2.0.0-rc.10", features = ["ndarray", "directml", "cuda"] }
+ort = { version = "2.0.0-rc.10", features = ["ndarray", "directml", "cuda", "download-binaries"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ort = { version = "2.0.0-rc.10", features = ["ndarray", "cuda"] }
+ort = { version = "2.0.0-rc.10", features = ["ndarray", "cuda", "download-binaries"] }
 
 [build-dependencies]
 tauri-plugin = { version = "2.2", features = [ "build" ] }

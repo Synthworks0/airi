@@ -307,6 +307,30 @@
           "markdownDescription": "Denies the ipc_audio_transcription command without any pre-configured scope."
         },
         {
+          "description": "Enables the list_installed_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-installed-models",
+          "markdownDescription": "Enables the list_installed_models command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_installed_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-installed-models",
+          "markdownDescription": "Denies the list_installed_models command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-models",
+          "markdownDescription": "Enables the list_models command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-models",
+          "markdownDescription": "Denies the list_models command without any pre-configured scope."
+        },
+        {
           "description": "Enables the load_candle_model_whisper command without any pre-configured scope.",
           "type": "string",
           "const": "allow-load-candle-model-whisper",
@@ -331,10 +355,10 @@
           "markdownDescription": "Denies the load_ort_model_whisper command without any pre-configured scope."
         },
         {
-          "description": "This permission set configures what kind of\noperations are available from the mcp plugin.\n\n#### Granted Permissions\n\nAll operations are enabled by default.\n\n#### This default permission set includes:\n\n- `allow-load-ort-model-whisper`\n- `allow-ipc-audio-transcription`",
+          "description": "This permission set configures what kind of\r\noperations are available from the mcp plugin.\r\n\r\n#### Granted Permissions\r\n\r\nAll operations are enabled by default.\r\n\n#### This default permission set includes:\n\n- `allow-load-ort-model-whisper`\n- `allow-ipc-audio-transcription`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "This permission set configures what kind of\noperations are available from the mcp plugin.\n\n#### Granted Permissions\n\nAll operations are enabled by default.\n\n#### This default permission set includes:\n\n- `allow-load-ort-model-whisper`\n- `allow-ipc-audio-transcription`"
+          "markdownDescription": "This permission set configures what kind of\r\noperations are available from the mcp plugin.\r\n\r\n#### Granted Permissions\r\n\r\nAll operations are enabled by default.\r\n\n#### This default permission set includes:\n\n- `allow-load-ort-model-whisper`\n- `allow-ipc-audio-transcription`"
         }
       ]
     }

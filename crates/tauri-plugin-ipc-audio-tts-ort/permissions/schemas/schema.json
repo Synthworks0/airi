@@ -295,58 +295,64 @@
       "type": "string",
       "oneOf": [
         {
-          "description": "Enables the call_tool command without any pre-configured scope.",
+          "description": "Enables the list_installed_models command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-call-tool",
-          "markdownDescription": "Enables the call_tool command without any pre-configured scope."
+          "const": "allow-list-installed-models",
+          "markdownDescription": "Enables the list_installed_models command without any pre-configured scope."
         },
         {
-          "description": "Denies the call_tool command without any pre-configured scope.",
+          "description": "Denies the list_installed_models command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-call-tool",
-          "markdownDescription": "Denies the call_tool command without any pre-configured scope."
+          "const": "deny-list-installed-models",
+          "markdownDescription": "Denies the list_installed_models command without any pre-configured scope."
         },
         {
-          "description": "Enables the connect_server command without any pre-configured scope.",
+          "description": "Enables the list_models command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-connect-server",
-          "markdownDescription": "Enables the connect_server command without any pre-configured scope."
+          "const": "allow-list-models",
+          "markdownDescription": "Enables the list_models command without any pre-configured scope."
         },
         {
-          "description": "Denies the connect_server command without any pre-configured scope.",
+          "description": "Denies the list_models command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-connect-server",
-          "markdownDescription": "Denies the connect_server command without any pre-configured scope."
+          "const": "deny-list-models",
+          "markdownDescription": "Denies the list_models command without any pre-configured scope."
         },
         {
-          "description": "Enables the disconnect_server command without any pre-configured scope.",
+          "description": "Enables the list_voices command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-disconnect-server",
-          "markdownDescription": "Enables the disconnect_server command without any pre-configured scope."
+          "const": "allow-list-voices",
+          "markdownDescription": "Enables the list_voices command without any pre-configured scope."
         },
         {
-          "description": "Denies the disconnect_server command without any pre-configured scope.",
+          "description": "Denies the list_voices command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-disconnect-server",
-          "markdownDescription": "Denies the disconnect_server command without any pre-configured scope."
+          "const": "deny-list-voices",
+          "markdownDescription": "Denies the list_voices command without any pre-configured scope."
         },
         {
-          "description": "Enables the list_tools command without any pre-configured scope.",
+          "description": "Enables the load_model command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-list-tools",
-          "markdownDescription": "Enables the list_tools command without any pre-configured scope."
+          "const": "allow-load-model",
+          "markdownDescription": "Enables the load_model command without any pre-configured scope."
         },
         {
-          "description": "Denies the list_tools command without any pre-configured scope.",
+          "description": "Denies the load_model command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-list-tools",
-          "markdownDescription": "Denies the list_tools command without any pre-configured scope."
+          "const": "deny-load-model",
+          "markdownDescription": "Denies the load_model command without any pre-configured scope."
         },
         {
-          "description": "This permission set configures what kind of\r\noperations are available from the mcp plugin.\r\n\r\n#### Granted Permissions\r\n\r\nAll operations are enabled by default.\r\n\n#### This default permission set includes:\n\n- `allow-connect-server`\n- `allow-disconnect-server`\n- `allow-list-tools`\n- `allow-call-tool`",
+          "description": "Enables the synthesize command without any pre-configured scope.",
           "type": "string",
-          "const": "default",
-          "markdownDescription": "This permission set configures what kind of\r\noperations are available from the mcp plugin.\r\n\r\n#### Granted Permissions\r\n\r\nAll operations are enabled by default.\r\n\n#### This default permission set includes:\n\n- `allow-connect-server`\n- `allow-disconnect-server`\n- `allow-list-tools`\n- `allow-call-tool`"
+          "const": "allow-synthesize",
+          "markdownDescription": "Enables the synthesize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the synthesize command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-synthesize",
+          "markdownDescription": "Denies the synthesize command without any pre-configured scope."
         }
       ]
     }

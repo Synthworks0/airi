@@ -1528,6 +1528,9 @@ importers:
       '@proj-airi/lobe-icons':
         specifier: ^1.0.10
         version: 1.0.10
+      '@tauri-apps/api':
+        specifier: ^2.7.0
+        version: 2.7.0
       '@types/culori':
         specifier: ^4.0.0
         version: 4.0.0

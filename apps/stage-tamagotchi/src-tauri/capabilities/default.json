@@ -29,6 +29,16 @@
     "window-pass-through-on-hover:default",
     "window-router-link:default",
     "ipc-audio-transcription-ort:default",
-    "ipc-audio-vad-ort:default"
+    "ipc-audio-transcription-ort:allow-load-ort-model-whisper",
+    "ipc-audio-transcription-ort:allow-ipc-audio-transcription",
+    "ipc-audio-transcription-ort:allow-list-models",
+    "ipc-audio-transcription-ort:allow-list-installed-models",
+    "ipc-audio-vad-ort:default",
+    "ipc-audio-tts-ort:default",
+    "ipc-audio-tts-ort:allow-load-model",
+    "ipc-audio-tts-ort:allow-list-models",
+    "ipc-audio-tts-ort:allow-list-voices",
+    "ipc-audio-tts-ort:allow-list-installed-models",
+    "ipc-audio-tts-ort:allow-synthesize"
   ]
 }

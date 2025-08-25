@@ -41,6 +41,11 @@ const { providers } = storeToRefs(providersStore)
 // Get provider metadata
 const providerMetadata = computed(() => providersStore.getProviderMetadata(props.providerId))
 
+// Check if this is a local provider (no API key or base URL needed)
+const isLocalProvider = computed(() =>
+  props.providerId.startsWith('app-local-') || props.providerId.startsWith('browser-local-'),
+)
+
 // Common provider settings
 const apiKey = computed({
   get: () => providers.value[props.providerId]?.apiKey as string | undefined || '',
@@ -133,7 +138,12 @@ function handleResetVoiceSettings() {
           :description="t('settings.pages.providers.common.section.basic.description')"
           :on-reset="handleResetVoiceSettings"
         >
-          <ProviderApiKeyInput v-model="apiKey" :provider-name="providerMetadata?.localizedName" :placeholder="props.placeholder || 'API Key'" />
+          <ProviderApiKeyInput
+            v-if="!isLocalProvider"
+            v-model="apiKey"
+            :provider-name="providerMetadata?.localizedName"
+            :placeholder="props.placeholder || 'API Key'"
+          />
           <!-- Slot for provider-specific basic settings -->
           <slot name="basic-settings" />
         </ProviderBasicSettings>
@@ -152,6 +162,7 @@ function handleResetVoiceSettings() {
         <!-- Advanced settings section -->
         <ProviderAdvancedSettings :title="t('settings.pages.providers.common.section.advanced.title')">
           <ProviderBaseUrlInput
+            v-if="!isLocalProvider"
             v-model="baseUrl"
             :placeholder="providerMetadata?.defaultOptions?.().baseUrl as string || ''" required
           />

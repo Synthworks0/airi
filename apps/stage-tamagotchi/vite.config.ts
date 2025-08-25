@@ -15,6 +15,15 @@ import { templateCompilerOptions } from '@tresjs/core'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      external: [
+        '@tauri-apps/api',
+        '@tauri-apps/api/core',
+        '@tauri-apps/api/event',
+      ],
+    },
+  },
   optimizeDeps: {
     exclude: [
       '@proj-airi/stage-ui/*',

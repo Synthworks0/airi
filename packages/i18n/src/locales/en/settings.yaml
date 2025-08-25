@@ -296,12 +296,6 @@ pages:
           title: Voice Settings
     description: LLMs, speech providers, etc.
     provider:
-      app-local-audio-transcription:
-        title: App (Local)
-        description: https://github.com/moeru-ai/xsai-transformers
-      app-local-audio-speech:
-        title: App (Local)
-        description: https://github.com/moeru-ai/xsai-transformers
       browser-local-audio-transcription:
         title: Browser (Local)
         description: https://github.com/moeru-ai/xsai-transformers
@@ -455,10 +449,19 @@ pages:
       xai:
         description: x.ai
         title: xAI
-      transcriptions:
-        playground:
-          title: Transcription Playground
+      azure_ai_foundry:
+        description: ai.azure.com
+        title: Azure AI Foundry
+      app-local-audio-speech:
+        description: High-quality offline text-to-speech with ONNX models
+        title: Local TTS
+      app-local-audio-transcription:
+        description: Fast offline speech recognition with Whisper ONNX models
+        title: Local STT
     title: Providers
+    transcriptions:
+      playground:
+        title: Transcription Playground
   scene:
     description: Configure the environment where the character lives
     title: Scene

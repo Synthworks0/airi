@@ -17,7 +17,7 @@ import type {
   VoiceProviderWithExtraOptions,
 } from 'unspeech'
 
-import { computedAsync, useLocalStorage } from '@vueuse/core'
+import { useLocalStorage } from '@vueuse/core'
 import {
   createAnthropic,
   createAzure,
@@ -49,6 +49,15 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { models as elevenLabsModels } from './providers/elevenlabs/list-models'
+
+// Add at top after imports
+declare module '@tauri-apps/api/core' {
+  export function invoke(cmd: string, args?: Record<string, unknown>): Promise<any>
+}
+
+declare module '@tauri-apps/api/event' {
+  export function listen(event: string, handler: (event: any) => void): Promise<() => void>
+}
 
 export interface ProviderMetadata {
   id: string
@@ -150,6 +159,7 @@ export interface VoiceInfo {
   gender?: string
   deprecated?: boolean
   previewURL?: string
+  modelId?: string
   languages: {
     code: string
     title: string
@@ -230,47 +240,195 @@ export const useProvidersStore = defineStore('providers', () => {
       category: 'speech',
       tasks: ['text-to-speech', 'tts'],
       isAvailableBy: async () => {
-        if ('window' in globalThis && globalThis.window != null) {
-          if ('__TAURI__' in globalThis.window && globalThis.window.__TAURI__ != null) {
+        // Detect Tauri runtime (v1 or v2) reliably
+        if (typeof window !== 'undefined') {
+          const w = window as unknown as Record<string, unknown>
+          if (w.__TAURI__ != null || w.__TAURI_INTERNALS__ != null || w.__TAURI_METADATA__ != null)
             return true
-          }
         }
 
-        return false
+        // Fallback: try dynamic import which only succeeds inside Tauri/WebView
+        try {
+          const mod = await import('@tauri-apps/api/core')
+          return typeof (mod as any)?.invoke === 'function'
+        }
+        catch {
+          return false
+        }
       },
       nameKey: 'settings.pages.providers.provider.app-local-audio-speech.title',
-      name: 'App (Local)',
+      name: 'Local TTS',
       descriptionKey: 'settings.pages.providers.provider.app-local-audio-speech.description',
-      description: 'https://github.com/huggingface/candle',
-      icon: 'i-lobe-icons:huggingface',
-      defaultOptions: () => ({}),
-      createProvider: async config => createOpenAI((config.baseUrl as string).trim()),
+      description: 'High-quality offline text-to-speech with ONNX models',
+      icon: 'i-solar:microphone-3-bold-duotone',
+      defaultOptions: () => ({
+        model: 'hexgrad/Kokoro-82M',
+        voice: 'af',
+        voiceSettings: {
+          pitch: 0,
+          speed: 1.0,
+          volume: 0,
+        },
+      }),
+      // @ts-expect-error - returning SpeechProvider instead of expected union type
+      createProvider: async () => {
+        return {
+          speech: (model: string, options: Record<string, any>) => ({
+            model,
+            generateSpeech: async ({ input, voice }: { input: string, voice: string }) => {
+              try {
+                // Validate inputs at provider level
+                if (!input || typeof input !== 'string') {
+                  throw new Error('Invalid or missing input text')
+                }
+                if (!voice || typeof voice !== 'string') {
+                  throw new Error('Invalid or missing voice ID')
+                }
+
+                // Defer Tauri import to call site; if not available, surface a clear error
+                let invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any>
+                try {
+                  invoke = (await import('@tauri-apps/api/core')).invoke
+                }
+                catch {
+                  throw new Error('Local TTS provider requires Tauri runtime')
+                }
+
+                const synthesisOptions = {
+                  pitch: options?.voiceSettings?.pitch ?? options?.pitch ?? 0,
+                  speed: options?.voiceSettings?.speed ?? options?.speed ?? 1.0,
+                  volume: options?.voiceSettings?.volume ?? options?.volume ?? 0,
+                }
+
+                const result = await invoke('plugin:ipc-audio-tts-ort|synthesize', {
+                  text: input,
+                  voiceId: voice,
+                  options: synthesisOptions,
+                }) as number[]
+
+                // Validate result
+                if (!result || !Array.isArray(result) || result.length === 0) {
+                  throw new Error('TTS plugin returned invalid or empty audio data')
+                }
+
+                // Convert to ArrayBuffer
+                const uint8Array = new Uint8Array(result)
+                return uint8Array.buffer
+              }
+              catch (error) {
+                // Ensure we always throw a proper Error object with a message
+                if (error instanceof Error) {
+                  throw error
+                }
+
+                const errorMessage = (() => {
+                  if (error === null || error === undefined) {
+                    return 'TTS synthesis failed with unknown error'
+                  }
+                  if (typeof error === 'string') {
+                    return error
+                  }
+                  try {
+                    return String(error)
+                  }
+                  catch {
+                    return 'TTS synthesis failed with unhandleable error'
+                  }
+                })()
+
+                throw new Error(errorMessage)
+              }
+            },
+          }),
+        }
+      },
       capabilities: {
-        listModels: async (config) => {
-          return (await listModels({
-            ...createOpenAI((config.baseUrl as string).trim()).model(),
-          })).map((model) => {
-            return {
-              id: model.id,
-              name: model.id,
-              provider: 'app-local-candle',
-              description: '',
-              contextLength: 0,
+        listModels: async () => {
+          try {
+            const { invoke } = await import('@tauri-apps/api/core')
+            const models = await invoke('plugin:ipc-audio-tts-ort|list_models') as Array<{
+              id: string
+              name: string
+              size: number
+              quality: 'high' | 'medium' | 'low'
+              languages: string[]
+              installed: boolean
+            }>
+            return models.map(m => ({
+              id: m.id,
+              name: m.name,
+              provider: 'app-local-audio-speech',
+              description: `${m.quality} quality, ${m.languages.join(', ')}`,
               deprecated: false,
-            } satisfies ModelInfo
-          })
+            }))
+          }
+          catch {
+            return [
+              { id: 'piper-amy-en', name: 'Piper Amy (English)', provider: 'app-local-audio-speech', description: 'High quality English voice' },
+              { id: 'piper-ryan-en', name: 'Piper Ryan (English)', provider: 'app-local-audio-speech', description: 'High quality English voice' },
+              { id: 'mimic3-en_US-vctk', name: 'Mimic 3 VCTK', provider: 'app-local-audio-speech', description: 'Multi-speaker English voices' },
+            ]
+          }
+        },
+        listVoices: async () => {
+          try {
+            const { invoke } = await import('@tauri-apps/api/core')
+            const voices = await invoke('plugin:ipc-audio-tts-ort|list_voices') as Array<{
+              id: string
+              name: string
+              gender: string
+              language: string
+              modelId: string
+            }>
+            return voices.map(v => ({
+              id: v.id,
+              name: v.name,
+              provider: 'app-local-audio-speech',
+              gender: v.gender,
+              modelId: v.modelId,
+              languages: [{ code: (v.language || 'en').split('-')[0], title: v.language || 'English' }],
+            }))
+          }
+          catch {
+            return [
+              { id: 'amy', name: 'Amy', provider: 'app-local-audio-speech', gender: 'female', languages: [{ code: 'en', title: 'English' }] },
+              { id: 'ryan', name: 'Ryan', provider: 'app-local-audio-speech', gender: 'male', languages: [{ code: 'en', title: 'English' }] },
+            ]
+          }
+        },
+        loadModel: async (config, hooks) => {
+          try {
+            const { invoke } = await import('@tauri-apps/api/core')
+            const { listen } = await import('@tauri-apps/api/event')
+
+            const unlisten = await listen('tauri-plugins:tauri-plugin-ipc-audio-tts-ort:load-model-progress', (event: any) => {
+              const [done, _filename, progress, totalSize, currentSize] = event.payload as [boolean, string, number, number, number]
+              if (hooks?.onProgress) {
+                hooks.onProgress({
+                  loaded: currentSize,
+                  total: totalSize,
+                  progress: progress / 100,
+                  done,
+                } as any)
+              }
+            })
+
+            try {
+              await invoke('plugin:ipc-audio-tts-ort|load_model', {
+                modelId: config.modelId,
+              })
+            }
+            finally {
+              unlisten()
+            }
+          }
+          catch {
+            // Non-Tauri context; nothing to load
+          }
         },
       },
       validators: {
-        validateProviderConfig: (config) => {
-          if (!config.baseUrl) {
-            return {
-              errors: [new Error('Base URL is required.')],
-              reason: 'Base URL is required. This is likely a bug, report to developers on https://github.com/moeru-ai/airi/issues.',
-              valid: false,
-            }
-          }
-
+        validateProviderConfig: () => {
           return {
             errors: [],
             reason: '',
@@ -284,47 +442,116 @@ export const useProvidersStore = defineStore('providers', () => {
       category: 'transcription',
       tasks: ['speech-to-text', 'automatic-speech-recognition', 'asr', 'stt'],
       isAvailableBy: async () => {
-        if ('window' in globalThis && globalThis.window != null) {
-          if ('__TAURI__' in globalThis.window && globalThis.window.__TAURI__ != null) {
+        // Detect Tauri runtime (v1 or v2) reliably
+        if (typeof window !== 'undefined') {
+          const w = window as unknown as Record<string, unknown>
+          if (w.__TAURI__ != null || w.__TAURI_INTERNALS__ != null || w.__TAURI_METADATA__ != null)
             return true
-          }
         }
 
-        return false
+        // Fallback: try dynamic import
+        try {
+          const mod = await import('@tauri-apps/api/core')
+          return typeof (mod as any)?.invoke === 'function'
+        }
+        catch {
+          return false
+        }
       },
       nameKey: 'settings.pages.providers.provider.app-local-audio-transcription.title',
-      name: 'App (Local)',
+      name: 'Local STT',
       descriptionKey: 'settings.pages.providers.provider.app-local-audio-transcription.description',
-      description: 'https://github.com/huggingface/candle',
-      icon: 'i-lobe-icons:huggingface',
-      defaultOptions: () => ({}),
-      createProvider: async config => createOpenAI((config.baseUrl as string).trim()),
+      description: 'Fast offline speech recognition with Whisper ONNX models',
+      icon: 'i-solar:microphone-3-bold-duotone',
+      defaultOptions: () => ({
+        model: 'base',
+      }),
+      // @ts-expect-error - returning TranscriptionProvider instead of expected union type
+      createProvider: async () => {
+        // Only import Tauri APIs in Tauri context
+        if (typeof window === 'undefined' || !('__TAURI__' in window)) {
+          throw new Error('Local STT provider requires Tauri runtime')
+        }
+        const { invoke } = await import('@tauri-apps/api/core')
+        return {
+          transcription: (model: string) => ({
+            model,
+            transcribe: async ({ audio, language }: { audio: File | Blob, language?: string }) => {
+              const arrayBuffer = await audio.arrayBuffer()
+              const float32Array = new Float32Array(arrayBuffer)
+
+              const result = await invoke('plugin:ipc-audio-transcription-ort|ipc_audio_transcription', {
+                chunk: Array.from(float32Array),
+                language: language || 'en',
+              }) as string
+
+              return { text: result }
+            },
+          }),
+        }
+      },
       capabilities: {
-        listModels: async (config) => {
-          return (await listModels({
-            ...createOpenAI((config.baseUrl as string).trim()).model(),
-          })).map((model) => {
-            return {
-              id: model.id,
-              name: model.id,
-              provider: 'app-local-candle',
-              description: '',
-              contextLength: 0,
+        listModels: async () => {
+          if (typeof window === 'undefined' || !('__TAURI__' in window))
+            return []
+          const { invoke } = await import('@tauri-apps/api/core')
+          try {
+            const models = await invoke('plugin:ipc-audio-transcription-ort|list_models') as Array<{
+              id: string
+              name: string
+              size: number
+              accuracy: 'high' | 'medium' | 'low'
+              speed: 'fast' | 'medium' | 'slow'
+              installed: boolean
+            }>
+            return models.map(m => ({
+              id: m.id,
+              name: m.name,
+              provider: 'app-local-audio-transcription',
+              description: `${m.accuracy} accuracy, ${m.speed} speed`,
               deprecated: false,
-            } satisfies ModelInfo
+            }))
+          }
+          catch {
+            return [
+              { id: 'whisper-large-v3-turbo', name: 'Whisper Large v3 Turbo', provider: 'app-local-audio-transcription', description: 'Best quality, GPU recommended' },
+              { id: 'whisper-medium', name: 'Whisper Medium', provider: 'app-local-audio-transcription', description: 'Balanced quality and speed' },
+              { id: 'whisper-base', name: 'Whisper Base', provider: 'app-local-audio-transcription', description: 'Fast, lower accuracy' },
+              { id: 'whisper-tiny', name: 'Whisper Tiny', provider: 'app-local-audio-transcription', description: 'Fastest, basic accuracy' },
+            ]
+          }
+        },
+        loadModel: async (config, hooks) => {
+          if (typeof window === 'undefined' || !('__TAURI__' in window))
+            return
+          const { invoke } = await import('@tauri-apps/api/core')
+          const { listen } = await import('@tauri-apps/api/event')
+
+          const unlisten = await listen('tauri-plugins:tauri-plugin-ipc-audio-transcription-ort:load-model-whisper-progress', (event: any) => {
+            const [done, progress, totalSize, currentSize] = event.payload as [boolean, number, number, number] // remove filename
+            if (hooks?.onProgress) {
+              hooks.onProgress({
+                loaded: currentSize,
+                total: totalSize,
+                progress: progress / 100,
+                done,
+              } as any)
+            }
           })
+
+          try {
+            const modelType = (config.modelId as string | undefined)?.replace('whisper-', '').replace('-', '') || 'base'
+            await invoke('plugin:ipc-audio-transcription-ort|load_ort_model_whisper', {
+              modelType,
+            })
+          }
+          finally {
+            unlisten()
+          }
         },
       },
       validators: {
-        validateProviderConfig: (config) => {
-          if (!config.baseUrl) {
-            return {
-              errors: [new Error('Base URL is required.')],
-              reason: 'Base URL is required. This is likely a bug, report to developers on https://github.com/moeru-ai/airi/issues.',
-              valid: false,
-            }
-          }
-
+        validateProviderConfig: () => {
           return {
             errors: [],
             reason: '',
@@ -1987,23 +2214,57 @@ export const useProvidersStore = defineStore('providers', () => {
   // Initialize all providers
   Object.keys(providerMetadata).forEach(initializeProvider)
 
+  // Track if we're currently updating to prevent infinite loops
+  const isUpdatingConfiguration = ref(false)
+
   // Update configuration status for all providers
   async function updateConfigurationStatus() {
-    await Promise.all(Object.keys(providerMetadata).map(async (providerId) => {
-      try {
-        configuredProviders.value[providerId] = await validateProvider(providerId)
+    try {
+      const newStatus: Record<string, boolean> = {}
+
+      // Process providers sequentially to avoid overwhelming the system
+      for (const providerId of Object.keys(providerMetadata)) {
+        newStatus[providerId] = await validateProvider(providerId)
       }
-      catch {
-        configuredProviders.value[providerId] = false
+
+      // Only update if there are actual changes
+      const hasChanges = Object.keys(newStatus).some(
+        key => configuredProviders.value[key] !== newStatus[key],
+      )
+
+      if (hasChanges) {
+        Object.assign(configuredProviders.value, newStatus)
       }
-    }))
+    }
+    finally {
+      isUpdatingConfiguration.value = false
+    }
   }
 
-  // Call initially and watch for changes
-  watch(providerCredentials, updateConfigurationStatus, { deep: true, immediate: true })
+  // Debounced version to prevent excessive calls
+  let updateTimeout: NodeJS.Timeout | null = null
+  function debouncedUpdateConfigurationStatus() {
+    if (updateTimeout)
+      clearTimeout(updateTimeout)
+    updateTimeout = setTimeout(updateConfigurationStatus, 100)
+  }
 
-  // Available providers (only those that are properly configured)
-  const availableProviders = computed(() => Object.keys(providerMetadata).filter(providerId => configuredProviders.value[providerId]))
+  // Call initially
+  updateConfigurationStatus()
+
+  // Watch for changes (not immediate)
+  watch(providerCredentials, debouncedUpdateConfigurationStatus, { deep: true })
+
+  // Available providers (only those that are properly configured or don't require configuration)
+  const availableProviders = computed(() => {
+    return Object.keys(providerMetadata).filter((providerId) => {
+      if (providerId.startsWith('app-local-audio') || providerId.startsWith('browser-local')) {
+        return true
+      }
+
+      return configuredProviders.value[providerId]
+    })
+  })
 
   // Store available models for each provider
   const availableModels = ref<Record<string, ModelInfo[]>>({})
@@ -2087,12 +2348,21 @@ export const useProvidersStore = defineStore('providers', () => {
 
   // Get all providers metadata (for settings page)
   const allProvidersMetadata = computed(() => {
-    return Object.values(providerMetadata).map(metadata => ({
-      ...metadata,
-      localizedName: t(metadata.nameKey, metadata.name),
-      localizedDescription: t(metadata.descriptionKey, metadata.description),
-      configured: configuredProviders.value[metadata.id] || false,
-    }))
+    return Object.values(providerMetadata).map((metadata) => {
+      let configured = configuredProviders.value[metadata.id] || false
+
+      // Local providers don't need configuration, they're considered configured if available
+      if (metadata.id.startsWith('app-local-audio') || metadata.id.startsWith('browser-local')) {
+        configured = true // They'll be filtered by availability check instead
+      }
+
+      return {
+        ...metadata,
+        localizedName: t(metadata.nameKey, metadata.name),
+        localizedDescription: t(metadata.descriptionKey, metadata.description),
+        configured,
+      }
+    })
   })
 
   // Function to get provider object by provider id
@@ -2123,22 +2393,34 @@ export const useProvidersStore = defineStore('providers', () => {
     }
   }
 
-  const availableProvidersMetadata = computedAsync<ProviderMetadata[]>(async () => {
-    const providers: ProviderMetadata[] = []
+  // Available providers metadata (filtered by availability)
+  const availableProvidersMetadata = ref<ReturnType<typeof getProviderMetadata>[]>([])
 
+  async function updateAvailableProvidersMetadata() {
+    const providers = []
     for (const provider of allProvidersMetadata.value) {
       const p = getProviderMetadata(provider.id)
       const isAvailableBy = p.isAvailableBy || (() => true)
-
-      const isAvailable = await isAvailableBy()
-      if (isAvailable) {
-        providers.push(provider)
+      try {
+        const isAvailable = await isAvailableBy()
+        if (isAvailable) {
+          providers.push(provider)
+        }
+      }
+      catch (error) {
+        console.warn(`Availability check failed for ${provider.id}:`, error)
       }
     }
+    availableProvidersMetadata.value = providers
+  }
 
-    return providers
-  }, [])
+  // Call initially
+  updateAvailableProvidersMetadata()
 
+  // And watch for changes in allProvidersMetadata
+  watch(allProvidersMetadata, () => updateAvailableProvidersMetadata(), { deep: true })
+
+  // Then the category-specific ones
   const allChatProvidersMetadata = computed(() => {
     return availableProvidersMetadata.value.filter(metadata => metadata.category === 'chat')
   })
@@ -2156,11 +2438,23 @@ export const useProvidersStore = defineStore('providers', () => {
   })
 
   const configuredSpeechProvidersMetadata = computed(() => {
-    return allAudioSpeechProvidersMetadata.value.filter(metadata => configuredProviders.value[metadata.id])
+    return allAudioSpeechProvidersMetadata.value.filter((metadata) => {
+      // Local providers are considered configured if they're available
+      if (metadata.id.startsWith('app-local-audio') || metadata.id.startsWith('browser-local')) {
+        return true
+      }
+      return configuredProviders.value[metadata.id]
+    })
   })
 
   const configuredTranscriptionProvidersMetadata = computed(() => {
-    return allAudioTranscriptionProvidersMetadata.value.filter(metadata => configuredProviders.value[metadata.id])
+    return allAudioTranscriptionProvidersMetadata.value.filter((metadata) => {
+      // Local providers are considered configured if they're available
+      if (metadata.id.startsWith('app-local-audio') || metadata.id.startsWith('browser-local')) {
+        return true
+      }
+      return configuredProviders.value[metadata.id]
+    })
   })
 
   function getProviderConfig(providerId: string) {

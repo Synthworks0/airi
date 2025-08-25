@@ -50,6 +50,58 @@ Denies the ipc_audio_transcription command without any pre-configured scope.
 <tr>
 <td>
 
+`ipc-audio-transcription-ort:allow-list-installed-models`
+
+</td>
+<td>
+
+Enables the list_installed_models command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ipc-audio-transcription-ort:deny-list-installed-models`
+
+</td>
+<td>
+
+Denies the list_installed_models command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ipc-audio-transcription-ort:allow-list-models`
+
+</td>
+<td>
+
+Enables the list_models command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ipc-audio-transcription-ort:deny-list-models`
+
+</td>
+<td>
+
+Denies the list_models command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `ipc-audio-transcription-ort:allow-load-candle-model-whisper`
 
 </td>

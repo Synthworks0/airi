@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use clap::ValueEnum;
 use log::info;
+use serde_json;
 use tauri::{
   Manager,
   Runtime,
@@ -99,6 +100,75 @@ async fn ipc_audio_transcription<R: Runtime>(
   Ok(transcription)
 }
 
+#[tauri::command]
+async fn list_models() -> Result<Vec<serde_json::Value>, String> {
+  Ok(vec![
+    serde_json::json!({
+      "id": "whisper-large-v3-turbo",
+      "name": "Whisper Large v3 Turbo",
+      "size": 1550000000,
+      "accuracy": "high",
+      "speed": "medium",
+      "installed": false,
+    }),
+    serde_json::json!({
+      "id": "whisper-large-v3",
+      "name": "Whisper Large v3",
+      "size": 1550000000,
+      "accuracy": "high",
+      "speed": "slow",
+      "installed": false,
+    }),
+    serde_json::json!({
+      "id": "whisper-medium",
+      "name": "Whisper Medium",
+      "size": 769000000,
+      "accuracy": "medium",
+      "speed": "medium",
+      "installed": false,
+    }),
+    serde_json::json!({
+      "id": "whisper-small",
+      "name": "Whisper Small",
+      "size": 244000000,
+      "accuracy": "medium",
+      "speed": "fast",
+      "installed": false,
+    }),
+    serde_json::json!({
+      "id": "whisper-base",
+      "name": "Whisper Base",
+      "size": 145000000,
+      "accuracy": "medium",
+      "speed": "fast",
+      "installed": false,
+    }),
+    serde_json::json!({
+      "id": "whisper-tiny",
+      "name": "Whisper Tiny",
+      "size": 39000000,
+      "accuracy": "low",
+      "speed": "fast",
+      "installed": false,
+    }),
+  ])
+}
+
+#[tauri::command]
+async fn list_installed_models<R: Runtime>(
+  app: tauri::AppHandle<R>,
+) -> Result<Vec<String>, String> {
+  let data = app.state::<Mutex<AppDataWhisperProcessor>>();
+  let data = data.lock().unwrap();
+
+  let mut models = Vec::new();
+  if data.whisper_processor.is_some() {
+    models.push("whisper-base".to_string()); // Default loaded model
+  }
+
+  Ok(models)
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   PluginBuilder::new("ipc-audio-transcription-ort")
     .setup(|app, _| {
@@ -109,6 +179,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     .invoke_handler(tauri::generate_handler![
       load_ort_model_whisper,
       ipc_audio_transcription,
+      list_models,
+      list_installed_models,
     ])
     .build()
 }

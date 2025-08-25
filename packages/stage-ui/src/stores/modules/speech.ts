@@ -73,17 +73,30 @@ export const useSpeechStore = defineStore('speech', () => {
       return []
     }
 
+    // Check if provider metadata exists
+    const metadata = providersStore.getProviderMetadata(provider)
+    if (!metadata) {
+      console.warn(`Provider ${provider} not found`)
+      return []
+    }
+
     isLoadingSpeechProviderVoices.value = true
     speechProviderError.value = null
 
     try {
-      const voices = await providersStore.getProviderMetadata(provider).capabilities.listVoices?.(providersStore.getProviderConfig(provider)) || []
+      const voices = await metadata.capabilities.listVoices?.(providersStore.getProviderConfig(provider)) || []
       availableVoices.value[provider] = voices
       return voices
     }
     catch (error) {
-      console.error(`Error fetching voices for ${provider}:`, error)
+      // Don't log errors for providers that aren't running (like player2)
+      if (!error?.message?.includes('ERR_CONNECTION_REFUSED')) {
+        console.error(`Error fetching voices for ${provider}:`, error)
+      }
       speechProviderError.value = error instanceof Error ? error.message : 'Unknown error'
+
+      // Return empty array for failed providers
+      availableVoices.value[provider] = []
       return []
     }
     finally {
@@ -145,15 +158,73 @@ export const useSpeechStore = defineStore('speech', () => {
     voice: string,
     providerConfig: Record<string, any> = {},
   ): Promise<ArrayBuffer> {
-    const response = await generateSpeech({
-      ...provider.speech(model, {
-        ...providerConfig,
-      }),
-      input,
-      voice,
-    })
+    try {
+      // Validate inputs
+      if (!provider) {
+        throw new Error('Speech provider is required')
+      }
+      if (!model || typeof model !== 'string') {
+        throw new Error('Valid model name is required')
+      }
+      if (!input || typeof input !== 'string') {
+        throw new Error('Valid input text is required')
+      }
+      if (!voice || typeof voice !== 'string') {
+        throw new Error('Valid voice ID is required')
+      }
 
-    return response
+      const speechConfig = provider.speech(model, {
+        ...providerConfig,
+      })
+
+      // For local TTS, call generateSpeech directly to avoid external library issues
+      if (speechConfig.generateSpeech && typeof speechConfig.generateSpeech === 'function') {
+        const response = await speechConfig.generateSpeech({ input, voice })
+        return response
+      }
+
+      // Fallback to external generateSpeech for other providers
+      const generateSpeechParams = {
+        ...speechConfig,
+        input,
+        voice,
+      }
+
+      const response = await generateSpeech(generateSpeechParams)
+
+      if (!response) {
+        throw new Error('Speech generation returned no data')
+      }
+
+      return response
+    }
+    catch (error) {
+      console.error('Speech store error:', error)
+
+      // Re-throw with consistent error handling
+      const errorMessage = (() => {
+        if (error === null || error === undefined) {
+          return 'Speech generation failed with unknown error'
+        }
+        if (typeof error === 'string') {
+          return error
+        }
+        if (error instanceof Error) {
+          return error.message || 'Speech generation failed'
+        }
+        if (typeof error === 'object' && error.message) {
+          return String(error.message)
+        }
+        try {
+          return String(error)
+        }
+        catch {
+          return 'Speech generation failed with unhandleable error'
+        }
+      })()
+
+      throw new Error(errorMessage)
+    }
   }
 
   function generateSSML(
